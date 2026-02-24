@@ -105,6 +105,14 @@ async function startServer() {
   });
 
   // API Routes
+  app.get("/api/status", (req, res) => {
+    res.json({
+      database: db ? "MongoDB Atlas (Connected)" : "Local File (Non-persistent)",
+      env: process.env.NODE_ENV || "development",
+      mongodb_uri_set: !!MONGODB_URI
+    });
+  });
+
   app.get("/api/data", async (req, res) => {
     try {
       const data = await readData();
@@ -116,7 +124,9 @@ async function startServer() {
   });
 
   app.post("/api/users/sync", async (req, res) => {
-    const user = req.body;
+    const user = { ...req.body };
+    delete user._id; // Remove MongoDB internal ID if present
+    
     if (db) {
       await db.collection("users").updateOne({ id: user.id }, { $set: user }, { upsert: true });
     } else {
@@ -133,7 +143,9 @@ async function startServer() {
   });
 
   app.post("/api/loans/sync", async (req, res) => {
-    const loan = req.body;
+    const loan = { ...req.body };
+    delete loan._id;
+    
     if (db) {
       await db.collection("loans").updateOne({ id: loan.id }, { $set: loan }, { upsert: true });
     } else {
@@ -150,7 +162,9 @@ async function startServer() {
   });
 
   app.post("/api/notifications/sync", async (req, res) => {
-    const notif = req.body;
+    const notif = { ...req.body };
+    delete notif._id;
+    
     if (db) {
       await db.collection("notifications").updateOne({ id: notif.id }, { $set: notif }, { upsert: true });
     } else {

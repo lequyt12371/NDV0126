@@ -30,6 +30,23 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, loans, registeredUsersCount, systemBudget, rankProfit, onResetRankProfit, onLogout }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   
+  const [systemStatus, setSystemStatus] = useState<{ database: string, env: string } | null>(null);
+  
+  React.useEffect(() => {
+    const checkStatus = async () => {
+      try {
+        const res = await fetch('/api/status');
+        const data = await res.json();
+        setSystemStatus(data);
+      } catch (e) {
+        setSystemStatus({ database: "Error connecting to status API", env: "unknown" });
+      }
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
   const settledLoans = loans.filter(l => l.status === 'ĐÃ TẤT TOÁN');
   const pendingLoans = loans.filter(l => l.status === 'CHỜ DUYỆT' || l.status === 'CHỜ TẤT TOÁN');
   
@@ -150,6 +167,21 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, loans, registered
             <TrendingUp size={24} className="text-white/5" />
           </div>
         </div>
+      </div>
+
+      <div className="bg-[#111111] border border-white/5 rounded-[2rem] p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className={`w-2 h-2 rounded-full ${systemStatus?.database?.includes('Connected') ? 'bg-green-500 animate-pulse' : 'bg-red-500'}`}></div>
+          <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Trạng thái Database:</p>
+        </div>
+        <p className={`text-[10px] font-black uppercase ${systemStatus?.database?.includes('Connected') ? 'text-green-500' : 'text-red-500'}`}>
+          {systemStatus?.database || "Đang kiểm tra..."}
+        </p>
+        {!systemStatus?.database?.includes('Connected') && (
+          <p className="text-[8px] font-bold text-gray-600 uppercase leading-tight">
+            Lưu ý: Nếu trạng thái không phải "Connected", dữ liệu sẽ không được đồng bộ giữa các thiết bị. Vui lòng kiểm tra MONGODB_URI trên Vercel.
+          </p>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-4">
