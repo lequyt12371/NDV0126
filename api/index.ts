@@ -11,33 +11,42 @@ const MONGODB_URI = process.env.MONGODB_URI;
 const DB_NAME = "ndv_money";
 
 let db: Db | null = null;
+let connectionError: string | null = null;
 
 async function connectToDatabase() {
+  if (db) return db;
   if (MONGODB_URI) {
     try {
       console.log("Attempting to connect to MongoDB...");
       const client = new MongoClient(MONGODB_URI, {
-        connectTimeoutMS: 5000,
-        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 10000,
+        serverSelectionTimeoutMS: 10000,
       });
       await client.connect();
       db = client.db(DB_NAME);
+      connectionError = null;
       console.log("Successfully connected to MongoDB Atlas");
-    } catch (e) {
+      return db;
+    } catch (e: any) {
+      connectionError = e.message;
       console.error("CRITICAL: Failed to connect to MongoDB:", e);
       console.log("Falling back to local file storage (Note: This will not persist on Vercel)");
+      return null;
     }
   } else {
-    console.warn("MONGODB_URI is not defined. Using local file storage.");
+    connectionError = "MONGODB_URI environment variable is missing";
+    console.warn(connectionError);
+    return null;
   }
 }
 
 async function readData() {
-  if (db) {
-    const users = await db.collection("users").find({}).toArray();
-    const loans = await db.collection("loans").find({}).toArray();
-    const notifications = await db.collection("notifications").find({}).sort({ id: -1 }).limit(200).toArray();
-    const system = await db.collection("system").findOne({ id: "config" });
+  const database = await connectToDatabase();
+  if (database) {
+    const users = await database.collection("users").find({}).toArray();
+    const loans = await database.collection("loans").find({}).toArray();
+    const notifications = await database.collection("notifications").find({}).sort({ id: -1 }).limit(200).toArray();
+    const system = await database.collection("system").findOne({ id: "config" });
     
     return {
       users,
@@ -108,8 +117,10 @@ async function startServer() {
   app.get("/api/status", (req, res) => {
     res.json({
       database: db ? "MongoDB Atlas (Connected)" : "Local File (Non-persistent)",
+      error: connectionError,
       env: process.env.NODE_ENV || "development",
-      mongodb_uri_set: !!MONGODB_URI
+      mongodb_uri_set: !!MONGODB_URI,
+      tip: !db ? "Check if MONGODB_URI is set in Vercel and IP 0.0.0.0/0 is whitelisted in Atlas" : null
     });
   });
 
@@ -127,8 +138,9 @@ async function startServer() {
     const user = { ...req.body };
     delete user._id; // Remove MongoDB internal ID if present
     
-    if (db) {
-      await db.collection("users").updateOne({ id: user.id }, { $set: user }, { upsert: true });
+    const database = await connectToDatabase();
+    if (database) {
+      await database.collection("users").updateOne({ id: user.id }, { $set: user }, { upsert: true });
     } else {
       const data = await readData();
       const index = data.users.findIndex((u: any) => u.id === user.id);
@@ -146,8 +158,9 @@ async function startServer() {
     const loan = { ...req.body };
     delete loan._id;
     
-    if (db) {
-      await db.collection("loans").updateOne({ id: loan.id }, { $set: loan }, { upsert: true });
+    const database = await connectToDatabase();
+    if (database) {
+      await database.collection("loans").updateOne({ id: loan.id }, { $set: loan }, { upsert: true });
     } else {
       const data = await readData();
       const index = data.loans.findIndex((l: any) => l.id === loan.id);
@@ -165,8 +178,9 @@ async function startServer() {
     const notif = { ...req.body };
     delete notif._id;
     
-    if (db) {
-      await db.collection("notifications").updateOne({ id: notif.id }, { $set: notif }, { upsert: true });
+    const database = await connectToDatabase();
+    if (database) {
+      await database.collection("notifications").updateOne({ id: notif.id }, { $set: notif }, { upsert: true });
     } else {
       const data = await readData();
       const index = data.notifications.findIndex((n: any) => n.id === notif.id);
@@ -181,9 +195,10 @@ async function startServer() {
 
   app.post("/api/users", async (req, res) => {
     const incomingUsers = req.body;
-    if (db) {
+    const database = await connectToDatabase();
+    if (database) {
       for (const u of incomingUsers) {
-        await db.collection("users").updateOne({ id: u.id }, { $set: u }, { upsert: true });
+        await database.collection("users").updateOne({ id: u.id }, { $set: u }, { upsert: true });
       }
     } else {
       const data = await readData();
@@ -202,9 +217,10 @@ async function startServer() {
 
   app.post("/api/loans", async (req, res) => {
     const incomingLoans = req.body;
-    if (db) {
+    const database = await connectToDatabase();
+    if (database) {
       for (const l of incomingLoans) {
-        await db.collection("loans").updateOne({ id: l.id }, { $set: l }, { upsert: true });
+        await database.collection("loans").updateOne({ id: l.id }, { $set: l }, { upsert: true });
       }
     } else {
       const data = await readData();
@@ -223,9 +239,10 @@ async function startServer() {
 
   app.post("/api/notifications", async (req, res) => {
     const incomingNotifs = req.body;
-    if (db) {
+    const database = await connectToDatabase();
+    if (database) {
       for (const n of incomingNotifs) {
-        await db.collection("notifications").updateOne({ id: n.id }, { $set: n }, { upsert: true });
+        await database.collection("notifications").updateOne({ id: n.id }, { $set: n }, { upsert: true });
       }
     } else {
       const data = await readData();
@@ -243,8 +260,9 @@ async function startServer() {
 
   app.post("/api/budget", async (req, res) => {
     const { budget } = req.body;
-    if (db) {
-      await db.collection("system").updateOne({ id: "config" }, { $set: { budget } }, { upsert: true });
+    const database = await connectToDatabase();
+    if (database) {
+      await database.collection("system").updateOne({ id: "config" }, { $set: { budget } }, { upsert: true });
     } else {
       const data = await readData();
       data.budget = budget;
@@ -255,8 +273,9 @@ async function startServer() {
 
   app.post("/api/rankProfit", async (req, res) => {
     const { rankProfit } = req.body;
-    if (db) {
-      await db.collection("system").updateOne({ id: "config" }, { $set: { rankProfit } }, { upsert: true });
+    const database = await connectToDatabase();
+    if (database) {
+      await database.collection("system").updateOne({ id: "config" }, { $set: { rankProfit } }, { upsert: true });
     } else {
       const data = await readData();
       data.rankProfit = rankProfit;
@@ -267,10 +286,11 @@ async function startServer() {
 
   app.delete("/api/users/:id", async (req, res) => {
     const userId = req.params.id;
-    if (db) {
-      await db.collection("users").deleteOne({ id: userId });
-      await db.collection("loans").deleteMany({ userId: userId });
-      await db.collection("notifications").deleteMany({ userId: userId });
+    const database = await connectToDatabase();
+    if (database) {
+      await database.collection("users").deleteOne({ id: userId });
+      await database.collection("loans").deleteMany({ userId: userId });
+      await database.collection("notifications").deleteMany({ userId: userId });
     } else {
       const data = await readData();
       data.users = data.users.filter((u: any) => u.id !== userId);

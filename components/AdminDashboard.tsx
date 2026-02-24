@@ -30,7 +30,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, loans, registeredUsersCount, systemBudget, rankProfit, onResetRankProfit, onLogout }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   
-  const [systemStatus, setSystemStatus] = useState<{ database: string, env: string } | null>(null);
+  const [systemStatus, setSystemStatus] = useState<{ database: string, env: string, error?: string, tip?: string } | null>(null);
   
   React.useEffect(() => {
     const checkStatus = async () => {
@@ -177,9 +177,14 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, loans, registered
         <p className={`text-[10px] font-black uppercase ${systemStatus?.database?.includes('Connected') ? 'text-green-500' : 'text-red-500'}`}>
           {systemStatus?.database || "Đang kiểm tra..."}
         </p>
+        {systemStatus?.error && (
+          <p className="text-[8px] font-bold text-red-400 uppercase leading-tight">
+            Lỗi: {systemStatus.error}
+          </p>
+        )}
         {!systemStatus?.database?.includes('Connected') && (
           <p className="text-[8px] font-bold text-gray-600 uppercase leading-tight">
-            Lưu ý: Nếu trạng thái không phải "Connected", dữ liệu sẽ không được đồng bộ giữa các thiết bị. Vui lòng kiểm tra MONGODB_URI trên Vercel.
+            {systemStatus?.tip || "Lưu ý: Nếu trạng thái không phải \"Connected\", dữ liệu sẽ không được đồng bộ giữa các thiết bị. Vui lòng kiểm tra MONGODB_URI trên Vercel."}
           </p>
         )}
       </div>
