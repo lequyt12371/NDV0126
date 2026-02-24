@@ -98,6 +98,23 @@ const App: React.FC = () => {
     }
   };
 
+  const syncNotification = async (n: Notification, retries = 3) => {
+    try {
+      const response = await fetch('/api/notifications/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(n)
+      });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+    } catch (e) {
+      if (retries > 0) {
+        setTimeout(() => syncNotification(n, retries - 1), 1000);
+      } else {
+        console.error("Lỗi đồng bộ thông báo sau nhiều lần thử:", e);
+      }
+    }
+  };
+
   const addNotification = (userId: string, title: string, message: string, type: 'LOAN' | 'RANK' | 'SYSTEM') => {
     const newNotif: Notification = {
       id: `NOTIF-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -109,6 +126,7 @@ const App: React.FC = () => {
       type
     };
     setNotifications(prev => [newNotif, ...prev].slice(0, 50)); // Keep last 50
+    syncNotification(newNotif);
   };
 
   useEffect(() => {
