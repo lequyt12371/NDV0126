@@ -15,6 +15,11 @@ let connectionError: string | null = null;
 async function connectToDatabase() {
   if (db) return db;
   if (MONGODB_URI) {
+    if (MONGODB_URI.includes("ndv126")) {
+      connectionError = "You are using an OLD MongoDB URI (ndv126). Please update MONGODB_URI on Vercel to use 'ndv26'.";
+      console.error(connectionError);
+      return null;
+    }
     try {
       console.log("Attempting to connect to MongoDB...");
       const client = new MongoClient(MONGODB_URI, {

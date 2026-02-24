@@ -30,7 +30,7 @@ interface AdminDashboardProps {
 const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, loans, registeredUsersCount, systemBudget, rankProfit, onResetRankProfit, onLogout }) => {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   
-  const [systemStatus, setSystemStatus] = useState<{ database: string, env: string, error?: string, tip?: string } | null>(null);
+  const [systemStatus, setSystemStatus] = useState<{ database: string, env: string, error?: string, tip?: string, current_uri_preview?: string } | null>(null);
   
   React.useEffect(() => {
     const checkStatus = async () => {
@@ -177,6 +177,11 @@ const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, loans, registered
         <p className={`text-[10px] font-black uppercase ${systemStatus?.database?.includes('Connected') ? 'text-green-500' : 'text-red-500'}`}>
           {systemStatus?.database || "Đang kiểm tra..."}
         </p>
+        {systemStatus?.current_uri_preview && (
+          <p className="text-[8px] font-mono text-gray-500 break-all">
+            URI: {systemStatus.current_uri_preview}
+          </p>
+        )}
         {systemStatus?.error && (
           <p className="text-[8px] font-bold text-red-400 uppercase leading-tight">
             Lỗi: {systemStatus.error}
