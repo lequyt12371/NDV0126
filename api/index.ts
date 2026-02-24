@@ -1,6 +1,5 @@
 
 import express from "express";
-import { createServer as createViteServer } from "vite";
 import fs from "fs";
 import path from "path";
 import cors from "cors";
@@ -41,20 +40,25 @@ async function connectToDatabase() {
 }
 
 async function readData() {
-  const database = await connectToDatabase();
-  if (database) {
-    const users = await database.collection("users").find({}).toArray();
-    const loans = await database.collection("loans").find({}).toArray();
-    const notifications = await database.collection("notifications").find({}).sort({ id: -1 }).limit(200).toArray();
-    const system = await database.collection("system").findOne({ id: "config" });
-    
-    return {
-      users,
-      loans,
-      notifications,
-      budget: system?.budget ?? 30000000,
-      rankProfit: system?.rankProfit ?? 0
-    };
+  try {
+    const database = await connectToDatabase();
+    if (database) {
+      const users = await database.collection("users").find({}).toArray();
+      const loans = await database.collection("loans").find({}).toArray();
+      const notifications = await database.collection("notifications").find({}).sort({ id: -1 }).limit(200).toArray();
+      const system = await database.collection("system").findOne({ id: "config" });
+      
+      return {
+        users,
+        loans,
+        notifications,
+        budget: system?.budget ?? 30000000,
+        rankProfit: system?.rankProfit ?? 0
+      };
+    }
+  } catch (e: any) {
+    console.error("MongoDB Query Error, falling back to local:", e);
+    connectionError = `Query Error: ${e.message}`;
   }
 
   try {
@@ -115,12 +119,18 @@ async function startServer() {
 
   // API Routes
   app.get("/api/status", (req, res) => {
+    // Mask the URI for security but show enough to identify it
+    const maskedUri = MONGODB_URI 
+      ? MONGODB_URI.replace(/\/\/.*@/, "//****:****@").split('?')[0] 
+      : "Not set";
+
     res.json({
       database: db ? "MongoDB Atlas (Connected)" : "Local File (Non-persistent)",
+      current_uri_preview: maskedUri,
       error: connectionError,
       env: process.env.NODE_ENV || "development",
       mongodb_uri_set: !!MONGODB_URI,
-      tip: !db ? "Check if MONGODB_URI is set in Vercel and IP 0.0.0.0/0 is whitelisted in Atlas" : null
+      tip: !db ? "Check if MONGODB_URI is set in Vercel and IP 0.0.0.0/0 is whitelisted in Atlas. Ensure you are not using an old URI." : null
     });
   });
 
@@ -307,6 +317,7 @@ async function startServer() {
 
   if (useVite) {
     console.log("Using Vite middleware");
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
