@@ -15,13 +15,20 @@ let db: Db | null = null;
 async function connectToDatabase() {
   if (MONGODB_URI) {
     try {
-      const client = new MongoClient(MONGODB_URI);
+      console.log("Attempting to connect to MongoDB...");
+      const client = new MongoClient(MONGODB_URI, {
+        connectTimeoutMS: 5000,
+        serverSelectionTimeoutMS: 5000,
+      });
       await client.connect();
       db = client.db(DB_NAME);
-      console.log("Connected to MongoDB Atlas");
+      console.log("Successfully connected to MongoDB Atlas");
     } catch (e) {
-      console.error("Failed to connect to MongoDB, falling back to local file:", e);
+      console.error("CRITICAL: Failed to connect to MongoDB:", e);
+      console.log("Falling back to local file storage (Note: This will not persist on Vercel)");
     }
+  } else {
+    console.warn("MONGODB_URI is not defined. Using local file storage.");
   }
 }
 
@@ -282,6 +289,13 @@ async function startServer() {
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);
   });
+
+  return app;
 }
 
-startServer();
+const appPromise = startServer();
+
+export default async (req: any, res: any) => {
+  const app = await appPromise;
+  return app(req, res);
+};
