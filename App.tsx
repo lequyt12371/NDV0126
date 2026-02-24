@@ -64,27 +64,37 @@ const App: React.FC = () => {
   const [registerError, setRegisterError] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  const syncUser = async (u: User) => {
+  const syncUser = async (u: User, retries = 3) => {
     try {
-      await fetch('/api/users/sync', {
+      const response = await fetch('/api/users/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(u)
       });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     } catch (e) {
-      console.error("Lỗi đồng bộ user:", e);
+      if (retries > 0) {
+        setTimeout(() => syncUser(u, retries - 1), 1000);
+      } else {
+        console.error("Lỗi đồng bộ user sau nhiều lần thử:", e);
+      }
     }
   };
 
-  const syncLoan = async (l: LoanRecord) => {
+  const syncLoan = async (l: LoanRecord, retries = 3) => {
     try {
-      await fetch('/api/loans/sync', {
+      const response = await fetch('/api/loans/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(l)
       });
+      if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
     } catch (e) {
-      console.error("Lỗi đồng bộ loan:", e);
+      if (retries > 0) {
+        setTimeout(() => syncLoan(l, retries - 1), 1000);
+      } else {
+        console.error("Lỗi đồng bộ loan sau nhiều lần thử:", e);
+      }
     }
   };
 
@@ -307,34 +317,51 @@ const App: React.FC = () => {
     }
   }, [isInitialized, loans, registeredUsers]);
 
+  const isPersisting = React.useRef(false);
   useEffect(() => {
     if (!isInitialized) return;
     const persist = async () => {
+      if (isPersisting.current) return;
+      isPersisting.current = true;
+      
       localStorage.setItem('vnv_user', user ? JSON.stringify(user) : '');
       
       try {
-        // We no longer push entire arrays here to avoid overwriting other clients' data
-        // Only push single values that don't have individual sync endpoints yet
-        
-        await fetch('/api/notifications', {
+        const fetchWithRetry = async (url: string, options: any, retries = 2) => {
+          try {
+            const res = await fetch(url, options);
+            if (!res.ok) throw new Error(`Status ${res.status}`);
+            return res;
+          } catch (err) {
+            if (retries > 0) {
+              await new Promise(r => setTimeout(r, 1000));
+              return fetchWithRetry(url, options, retries - 1);
+            }
+            throw err;
+          }
+        };
+
+        await fetchWithRetry('/api/notifications', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(notifications)
         });
         
-        await fetch('/api/budget', {
+        await fetchWithRetry('/api/budget', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ budget: systemBudget })
         });
         
-        await fetch('/api/rankProfit', {
+        await fetchWithRetry('/api/rankProfit', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ rankProfit })
         });
       } catch (e) {
         console.error("Lỗi khi lưu dữ liệu lên server:", e);
+      } finally {
+        isPersisting.current = false;
       }
     };
     const timer = setTimeout(persist, 2000);
